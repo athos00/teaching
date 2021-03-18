@@ -1,0 +1,316 @@
+---
+title: "LinearRegression"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Goals
+
+0. Read standard linear model notation
+1. Understand linear regression as a search for a hyperplane.
+2. Know what is "linear" about linear regression
+
+![van Gogh's irises, you can see the original at the Getty museum here in Los Angeles!](http://media.getty.edu/museum/images/web/enlarge/00094701.jpg)
+
+## On the notation of higher dimensions:
+
+Some time in the 1930s, Edgar Anderson collected data on three types of closely related iris flowers to quantify the variation between species.
+
+For each flower, he recorded three measurements. We call this collection of measurements a vector, $\mathbf{y}$:
+
+$$
+\mathbf{y} = \begin{bmatrix}
+        y_1 \text{(length of petal)} \\
+        y_2 \text{(length of sepal)}\\
+        y_3 \text{(width of sepal)}
+\end{bmatrix}
+$$
+Ronald Fisher published this data in 1936 in a paper titled *The use of multiple measurements in taxonomic problems* and so this data set has come to be known as [Fisher's/Anderson's iris flower data](https://en.wikipedia.org/wiki/Iris_flower_data_set)
+
+Bold lower case letters, such as $\mathbf{y}$ represent **vectors** and hold collections of individual numbers.
+
+An individual number (a.k.a. a **scalar**) is denoted by a lower case english or greek letter with a subscript, e.g.
+
+*   $y_1$ is a number
+*   $\beta_5$ ("beta 5'') is a number.
+*   $\epsilon_2$ ("epsilon 2") is a number.
+
+Vectors can be written either vertically (a "column" vector) like above, or horizontally, like the "row" vector:
+$$
+    \mathbf{y} ^T = \{ y_1 , y_2, y_3, \ldots, y_n\}.
+$$
+Typically, the default is to write a vector as a column vector. Row vector equivalents are written with a small 'T' superscript indicating the vector has been **T**ransposed.
+
+Each $n$-dimensional vector represents a point in $n$ dimensional space.
+
+Let's visualize the Edgar's data in three-dimensional space.
+
+```{r}
+# install.packages("scatterplot3d"); # install pkg with 3d plotting function if needed
+require(scatterplot3d); # load pkg
+uclaBlue = rgb(matrix(c(39/255, 116/255, 174/255), ncol = 3, nrow = 1)) # make UCLA blue from RBG values
+scatterplot3d(iris[,1:3], pch = 19, color=uclaBlue) 
+```
+
+
+When we have many observations, as in the iris data set displayed above, we collect each vector of observations into a **matrix**. Matrices are collections of vectors and are represented by capital letters, e.g.
+
+$$
+X = \begin{bmatrix}
+    5.1 & 3.5 & 1.4\\
+    4.9 & 3.0 & 1.4\\
+    4.7 & 3.2 & 1.3\\
+    4.6 & 3.1 & 1.5
+  \end{bmatrix}
+$$
+
+$X$ is a "4 x 3" (read: "four by three") matrix, meaning it has 4 rows and 3 columns. It can be viewed as a collection of three column vectors, or more typical for our purposes, as a collection of four row vectors. 
+
+The above matrix represents four different iris flowers:
+
+```{r}
+# print to screen the annotated matrix:
+iris[1:4,1:3]
+# ?iris # to learn more about the iris data set, (there are 5 observations in all!)
+```
+
+## Some vocabulary
+
+**Linear regression** is a simple way to mathematically model the relationship between two or more observed phenomena. 
+
+Ex: age, height
+
+We always designate one, and only one of our observations to be the **outcome variable** although you may also hear it referred to as the `response`, `dependent variable` or even simply $\mathbf{y}$.
+All other observations are termed **predictors** although you may also hear them referred to as the `independent variables`, `regressors`, `covariates`, `features`, `the data`, or even "the $X$ matrix"
+
+## Example: predict petal length with sepal measurements
+
+Our linear model:
+
+\begin{equation}
+\underbrace{\text{petal length}}_{y} = \beta_0 + \beta_1 \underbrace{\text{sepal length}}_{x_{1}} + \beta_2 \underbrace{\text{sepal width}}_{x_{2}} 
+\end{equation}
+
+
+```{r}
+X = iris[, c("Sepal.Length","Sepal.Width")] # predictors
+y = iris[,c("Petal.Length")] # outcome
+```
+
+What does a linear model look like geometrically?
+
+```{r}
+plot3d = scatterplot3d(iris[,1:3], pch = 19, color=uclaBlue) 
+model  = lm(y ~ X[,1] + X[,2])
+plot3d$plane3d(model)
+```
+What's linear about this model?
+
+The "linear'' in "linear regression" refers to the fact that we are interested in predicting some outcome variable by taking a linear combination of predictors. You can transform the data any way you like.
+
+Example: we could transform to use log(sepal length) and (sepal width)$^2$:
+```{r}
+log.Sepal.Length = log(iris[,1])
+Sepal.Width.squared = iris[,2]^2
+Petal.Length = iris[,3]
+
+plot3d = scatterplot3d(log.Sepal.Length, Sepal.Width.squared, Petal.Length, pch = 19, color=uclaBlue) 
+model  = lm(Petal.Length ~ log.Sepal.Length + Sepal.Width.squared)
+plot3d$plane3d(model)
+```
+
+Linear regression is about estimating $\boldsymbol{\beta}$ to find the "best" hyperplane. But how do we find/define the "best" $\boldsymbol{\beta}$?
+
+
+
+The full model is:
+$$
+y_i = \sum_i x_i \beta_i + \epsilon_i
+$$
+where $\epsilon_i$ is some random noise that interferes with our measurements. It could stand in for a covariate we have not accounted for or it could be actual measurement error. In either case, the most elementary assumption (and still often a useful one) is that 
+$$
+\epsilon_i \sim N(0, 1)
+$$
+
+i.e. the noise the $i$th observation is normally distributed with mean $0$ and variance $1$.
+
+## Hunt for the hyperplane!
+
+To build our model, we start with $X$ and $\mathbf{y}$. We know $X$. We know $\mathbf{y}$. We have a description for $\epsilon$'s distribution. What we don't know and want to estimate is $\beta$. If our model is correct, (and it's not, but suspend disbelief for now!) then $\beta$ has some true value that is unknown to us. In order to distinguish our estimate for $\beta$ from the true value, we will give **our estimate** a new name: "beta hat", $\hat{\beta}$, (because it wears a hat).
+
+The actual "model" model that we will use for making future predictions about petal length is
+$$
+\mathbf{\hat{y}} = X \hat{\beta}
+$$
+
+$\mathbf{y}$ is our predicted outcome, not the actual (observed) outcome.
+
+How do we find $\hat{\beta}$?
+
+By choosing an **objective function**.
+An objective function is some criteria we care about minimizing or maximizing (in other words, "optimizing") and it's what makes one hyperplane better than all the rest.
+
+Let's turn our attention to one common objective function known as "least squares".
+
+
+
+
+```{r}
+set.seed(28)
+indices = sample(100,15)
+x = iris[indices,1]
+y = iris[indices,3]
+westWoodGold = rgb(matrix(c(242/255, 169/255, 0), ncol = 3, nrow = 1))
+plot(x, y, pch=19, col = uclaBlue, xlab="Sepal Length", ylab="Petal Length", ylim=c(0,7)) # plot points
+model  = lm(y ~ x) 
+beta_hat = rev(model$coefficients) # estimated coefficients
+y_hat = x*beta_hat[1] + beta_hat[2] # OLS best fit line
+abline(beta_hat[2], beta_hat[1], col = westWoodGold) # add line to plot
+arrows(x, y, x, y_hat, length = 0.08, angle = 90, code = 3)
+```
+Each vertical line is known as an error bar and shows the residual error, $\epsilon$. In other words each vertical line displays the difference between our prediction, $\hat{y} = X \hat{\beta}$, and our observations: $y = X \beta + \epsilon$.
+
+Naturally, we wish to minimize the error in our prediction. How might we formulate our desire mathematically? We could try to minimize $\sum_{i=1}^n \epsilon_i$, but if we think about it, this will not work well. Why? Because large positive errors will offset large negative errors to yield an overall *small* sum of errors. One remedy that arises is to minimize $\sum_{i=1}^n | \epsilon_i |$, and this is a viable option known as least absolute value (LAV) regression. Here, however, we will unpack the canonical "least squares" method. It is important to understand that we must $\underline{\text{choose}}$ the objective function that we want to optimize.
+
+The least squares objective function:
+$$
+\sum_{i=1}^n \epsilon_i ^2 = \left( y_i - x_1 \beta_1 - x_2 \beta_2 - \ldots - x_n \beta_n 
+- \beta_{n+1} \right)^2
+$$
+is known as the **residual sum of squares** but you may also see it called the "sum of squared residuals". What do we know in the above equation? What are we trying to "optimize over"? How do you think we would write this in vector notation?
+
+# Appendix
+## Matrix algebra essentials
+
+
+#### Matrix elements and transpose
+Matrix $A$ has elements $a_{ij}$. $i$ denotes the row and $j$ denotes the column of the element, e.g.
+\begin{equation}
+    A
+    =
+    \begin{bmatrix}
+        a_{11} &  a_{12} & a_{13}\\
+        a_{21} & a_{22} & a_{23}\\
+        a_{31} & a_{32} & a_{33}
+    \end{bmatrix}
+\end{equation}
+
+The transpose of a matrix, takes each element $a_{ij}$ and places it in the spot of $a_{ji}$, e.g.
+\begin{equation}
+    A ^T
+    =
+    \begin{bmatrix}
+        a_{11} &  a_{21} & a_{31}\\
+        a_{12} & a_{22} & a_{23}\\
+        a_{13} & a_{23} & a_{33}
+    \end{bmatrix}
+\end{equation}
+Notice that the diagonals remain the same and the off-diagonals switch places. If $A$ and $B$ are matrices then the transpose of their product is:
+\begin{equation}
+(AB) ^T = B ^T A ^T
+\end{equation}
+
+#### Matrix vector multiplication
+Multiplying a matrix by a vector means you are taking a linear combination of the columns of the matrix. In other words,
+\begin{equation}
+    \begin{bmatrix}
+        1 &  1\\
+        2 & 1\\
+        3 & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+        \beta_1\\
+        \beta_2
+    \end{bmatrix}
+    =
+    \beta_1
+    \begin{bmatrix}
+        1 \\
+        2 \\
+        3
+    \end{bmatrix}
+    +
+    \beta_2
+    \begin{bmatrix}
+        1\\
+        1\\
+        1
+    \end{bmatrix}
+\end{equation}
+To read more about matrix mulitiplication, see [wikipedia's article on matrix multiplication](https://en.wikipedia.org/wiki/Matrix_multiplication), there are many different perspectives on this single operation!
+
+#### The identity matrix: $I$ (multiplying by 1)
+An identity matrix is a square matrix with $1$s on the diagonal and zeros everywhere else.
+Multipying any matrix or vector by the appropriately sized identity matrix yields that same matrix or vector, e.g.
+\begin{equation}
+    \begin{bmatrix}
+        1 &  1 & 4\\
+        2 & 5 & 3\\
+        3 & 1 & 2
+    \end{bmatrix}
+    \times
+    \underbrace{
+    \begin{bmatrix}
+        1 &  0 & 0\\
+        0 & 1 & 0\\
+        0 & 0 & 1
+    \end{bmatrix}
+    }_{\text{identity matrix: ``I''}}
+     =
+     \begin{bmatrix}
+        1 &  1 & 4\\
+        2 & 5 & 3\\
+        3 & 1 & 2
+    \end{bmatrix}
+\end{equation}
+
+#### Inverses
+A square matrix is a matrix with an equal number of columns and rows.
+
+Some square matrices have inverses, e.g., let $A$ be a matrix. If $A$ has an inverse, it will be denoted $A^{-1}$ and satisfy the property $A A^{-1} = A^{-1} A = I$.
+
+All matrices $B$ of the form $B = A ^T A$ are invertible.
+
+
+## Least squares optimization
+
+Using the matrix algebra facts above, together with rules for differentiation that can be found in [the matrix cookbook](https://www.math.uwaterloo.ca/~hwolkowi/matrixcookbook.pdf) we will derive the $\hat{\beta}$ that minimizes the residual sum of squares,
+\begin{equation}
+    \begin{aligned}
+\epsilon ^T \epsilon
+&= (y - \hat{y}) ^T (y - \hat{y})\\
+&= (y - X \hat{\beta}) ^T (y - X \hat{\beta}).
+    \end{aligned}
+\end{equation}
+To do this, we will take the derivative with respect to $\hat{\beta}$.
+\begin{equation}
+\newcommand{\gradient}[1]{\frac{\partial}{\partial #1}}
+    \begin{aligned}
+        \gradient{\hat{\beta}} \epsilon ^T \epsilon
+        &=
+        \gradient{\hat{\beta}} (y - X \hat{\beta}) ^T (y - X \hat{\beta})\\
+        &= \gradient{\hat{\beta}}
+        \left[ y ^T y - 2 y ^T X \hat{\beta} + \hat{\beta} ^T X ^T X \hat{\beta} \right]\\
+        &= -2 y ^T X + 2 \hat{\beta} ^T X ^T X
+    \end{aligned}
+\end{equation}
+Setting the derivative equal to zero gives us our estimate, $\hat{\beta}$.
+\begin{equation}
+    \begin{aligned}
+        - 2y ^T X + 2 \hat{\beta} ^T X ^T X
+        &= 0\\
+        \hat{\beta} ^T X ^T X  &= y ^T X\\
+        \hat{\beta} ^T = y ^T X (X ^T X )^{-1}
+    \end{aligned}
+\end{equation}
+Transposing both sides, we get:
+\begin{equation}
+\hat{\beta} = (X ^T X)^{-1} X ^T y
+\end{equation}
+
